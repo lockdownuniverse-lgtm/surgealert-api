@@ -4,7 +4,7 @@
 
 const { store } = require('../models/store');
 
-const THRESHOLDS = { LOW: 20, MED: 55, HIGH: 75 };
+const THRESHOLDS = { LOW: 5, MED: 55, HIGH: 75 };
 const REPORT_DECAY_MS = 30 * 60 * 1000;   // Reports older than 30 min lose weight
 const SPIKE_DECAY_MS  = 20 * 60 * 1000;   // Social spikes decay after 20 min
 const RADIUS_KM = 0.5;                     // Default scoring radius

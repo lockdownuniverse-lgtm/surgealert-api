@@ -3,6 +3,8 @@
 // Here we store them in memory and return them via REST
 
 const { store, getNextId } = require('../models/store');
+const axios = require('axios');
+const PUSH_WEBHOOK_URL = process.env.PUSH_WEBHOOK_URL || '';
 const { computeScore, shouldFireAlert } = require('./scoreEngine');
 
 const SEVERITY_MESSAGES = {
@@ -32,6 +34,10 @@ function evaluateAndAlert(lat, lon, locationLabel = null) {
   };
 
   store.alerts.unshift(alert);
+
+  if (PUSH_WEBHOOK_URL) {
+    axios.post(PUSH_WEBHOOK_URL, { alert }).catch(err => console.error('[push] Webhook error:', err.message));
+  }
 
   // TODO: Push via FCM to subscribers near (lat, lon)
   // await pushService.sendToNearbyDevices(lat, lon, alert);

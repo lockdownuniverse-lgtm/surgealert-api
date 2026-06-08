@@ -1,3 +1,4 @@
+const pgStore = require('../models/pgStore');
 // CrowdScore Engine
 // Combines user reports + social media spike data into a unified severity score.
 // Score 0–100. Thresholds: LOW=30, MED=55, HIGH=75
@@ -31,55 +32,31 @@ function decayFactor(createdAt, maxAgeMs) {
 // Crowd size bucket → base score contribution
 const SIZE_SCORES = { 1: 5, 2: 12, 3: 22, 4: 35, 5: 50 };
 
-function computeScore(lat, lon, radiusKm = RADIUS_KM) {
-  const now = Date.now();
+async function computeScore(lat, lon, radiusKm = 0.5) {
+  const SIZE_SCORES = { 1:5, 2:12, 3:22, 4:35, 5:50 };
+  const DECAY_MS_REPORTS = 30 * 60 * 1000;
+  const DECAY_MS_SPIKES  = 20 * 60 * 1000;
 
-  // --- User report component (max 60 points) ---
-  const nearbyReports = store.reports.filter(r => {
-    if (now - r.createdAt > REPORT_DECAY_MS) return false;
-    return haversine(lat, lon, r.lat, r.lon) <= radiusKm;
-  });
-
+  const reports = await pgStore.getReportsNear(lat, lon, radiusKm, 30);
+  
   let reportScore = 0;
-  for (const r of nearbyReports) {
-    const base = SIZE_SCORES[r.crowdSize] || 10;
-    const decay = decayFactor(r.createdAt, REPORT_DECAY_MS);
+  for (const r of reports) {
+    const base  = SIZE_SCORES[r.crowd_size] || 10;
+    const age   = Date.now() - new Date(r.created_at).getTime();
+    const decay = Math.max(0, 1 - age / DECAY_MS_REPORTS);
     reportScore += base * decay;
   }
   reportScore = Math.min(60, reportScore);
 
-  // --- Social spike component (max 40 points) ---
-  const nearbySpikes = store.socialSpikes.filter(s => {
-    if (now - s.createdAt > SPIKE_DECAY_MS) return false;
-    return haversine(lat, lon, s.lat, s.lon) <= radiusKm;
-  });
-
-  let spikeScore = 0;
-  for (const s of nearbySpikes) {
-    // spikeMultiplier: e.g. 3x normal volume = 3, capped at 8x
-    const multiplier = Math.min(8, s.spikeMultiplier || 1);
-    const normalized = ((multiplier - 1) / 7) * 40; // scale 1–8x → 0–40pts
-    const decay = decayFactor(s.createdAt, SPIKE_DECAY_MS);
-    spikeScore += normalized * decay;
-  }
-  spikeScore = Math.min(40, spikeScore);
-
-  const total = Math.round(reportScore + spikeScore);
-
+  const total = Math.round(reportScore);
   let severity = 'NONE';
   if (total >= THRESHOLDS.HIGH) severity = 'HIGH';
-  else if (total >= THRESHOLDS.MED) severity = 'MED';
-  else if (total >= THRESHOLDS.LOW) severity = 'LOW';
+  else if (total >= THRESHOLDS.MED)  severity = 'MED';
+  else if (total >= THRESHOLDS.LOW)  severity = 'LOW';
 
   return {
-    score: total,
-    severity,
-    components: {
-      reportScore: Math.round(reportScore),
-      spikeScore: Math.round(spikeScore),
-      reportCount: nearbyReports.length,
-      spikeCount: nearbySpikes.length,
-    },
+    score: total, severity,
+    components: { reportScore: Math.round(reportScore), spikeScore: 0, reportCount: reports.length, spikeCount: 0 }
   };
 }
 

@@ -1,11 +1,9 @@
-// Alert generation service
-// In production: push alerts via Firebase Cloud Messaging (FCM) / APNs
-// Here we store them in memory and return them via REST
-
-const { store, getNextId } = require('../models/store');
 const axios = require('axios');
+const pgStore = require('../models/pgStore');
+const { computeScore, THRESHOLDS } = require('./scoreEngine');
+
 const PUSH_WEBHOOK_URL = process.env.PUSH_WEBHOOK_URL || '';
-const { computeScore, shouldFireAlert } = require('./scoreEngine');
+const COOLDOWN_MIN = 2;
 
 const SEVERITY_MESSAGES = {
   HIGH: 'Large crowd surge detected nearby. Consider avoiding the area.',
@@ -13,56 +11,39 @@ const SEVERITY_MESSAGES = {
   LOW:  'Unusual crowd activity reported nearby.',
 };
 
-// Evaluate a location and create an alert if threshold is crossed
-function evaluateAndAlert(lat, lon, locationLabel = null) {
-  const result = computeScore(lat, lon);
-
+async function evaluateAndAlert(lat, lon, locationLabel = null) {
+  const result = await computeScore(lat, lon);
   if (result.severity === 'NONE') return null;
-  if (!shouldFireAlert(lat, lon)) return null;
 
-  const alert = {
-    id: getNextId(),
-    lat,
-    lon,
-    locationLabel: locationLabel || `${lat.toFixed(4)}, ${lon.toFixed(4)}`,
-    severity: result.severity,
-    score: result.score,
+  const cooldown = await pgStore.recentAlertNear(lat, lon, 0.5, COOLDOWN_MIN);
+  if (cooldown) return null;
+
+  const alert = await pgStore.createAlert({
+    lat, lon, locationLabel: locationLabel || `${lat.toFixed(4)}, ${lon.toFixed(4)}`,
+    severity: result.severity, score: result.score,
     message: SEVERITY_MESSAGES[result.severity],
     components: result.components,
-    createdAt: Date.now(),
-    resolved: false,
+  });
+
+  const apiAlert = {
+    id: alert.id, lat, lon,
+    locationLabel: alert.location_label,
+    severity: alert.severity, score: alert.score,
+    message: alert.message, components: result.components,
+    createdAt: new Date(alert.created_at).getTime(),
   };
 
-  store.alerts.unshift(alert);
-
   if (PUSH_WEBHOOK_URL) {
-    axios.post(PUSH_WEBHOOK_URL, { alert }).catch(err => console.error('[push] Webhook error:', err.message));
+    axios.post(PUSH_WEBHOOK_URL, { alert: apiAlert }).catch(err =>
+      console.error('[push] Webhook error:', err.message)
+    );
   }
 
-  // TODO: Push via FCM to subscribers near (lat, lon)
-  // await pushService.sendToNearbyDevices(lat, lon, alert);
-
-  return alert;
+  return apiAlert;
 }
 
-// Get active alerts near a user location within radiusKm
-function getAlertsNear(lat, lon, radiusKm = 1.5) {
-  const { haversine } = require('./scoreEngine');
-  const ACTIVE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-  const now = Date.now();
-
-  return store.alerts
-    .filter(a => {
-      if (a.resolved) return false;
-      if (now - a.createdAt > ACTIVE_WINDOW_MS) return false;
-      return haversine(lat, lon, a.lat, a.lon) <= radiusKm;
-    })
-    .map(a => ({
-      ...a,
-      distanceKm: +haversine(lat, lon, a.lat, a.lon).toFixed(2),
-      ageMinutes: Math.round((now - a.createdAt) / 60000),
-    }))
-    .sort((a, b) => b.score - a.score);
+async function getAlertsNear(lat, lon, radiusKm = 1.5) {
+  return pgStore.getAlertsNear(lat, lon, radiusKm, 120);
 }
 
 module.exports = { evaluateAndAlert, getAlertsNear };

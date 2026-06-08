@@ -35,6 +35,9 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+const pgStore = require('./models/pgStore');
+pgStore.init().catch(console.error);
+
 app.listen(PORT, () => console.log(`SurgeAlert API running on port ${PORT}`));
 
 module.exports = app;

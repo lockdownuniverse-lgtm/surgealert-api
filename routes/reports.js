@@ -10,7 +10,7 @@ async function reverseGeocode(lat, lon) {
   if (!GOOGLE_KEY) return null;
   try {
     const { data } = await axios.get(
-      'https://maps.googleapis.com/maps/api/geocode/json?latlng=' + lat + ',' + lon + '&result_type=neighborhood|sublocality|locality&key=' + GOOGLE_KEY
+      'https://maps.googleapis.com/maps/api/geocode/json?latlng=' + lat + ',' + lon + '&key=' + GOOGLE_KEY
     );
     const result = data.results[0];
     if (!result) return null;
@@ -18,9 +18,11 @@ async function reverseGeocode(lat, lon) {
     const neighborhood = comps.find(c => c.types.includes('neighborhood') || c.types.includes('sublocality'))?.long_name;
     const city = comps.find(c => c.types.includes('locality'))?.long_name;
     const state = comps.find(c => c.types.includes('administrative_area_level_1'))?.short_name;
+    const county = comps.find(c => c.types.includes('administrative_area_level_2'))?.long_name;
     if (neighborhood && city) return neighborhood + ', ' + city;
     if (city && state) return city + ', ' + state;
-    return null;
+    if (county && state) return county + ', ' + state;
+    return result.formatted_address?.split(',').slice(0,2).join(',') || null;
   } catch (err) {
     return null;
   }

@@ -1,8 +1,30 @@
 const express = require('express');
+const axios = require('axios');
+const GOOGLE_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
 const router = express.Router();
 const { requireLatLon, requireBody } = require('../middleware/validate');
 const pgStore = require('../models/pgStore');
 const { evaluateAndAlert } = require('../services/alertService');
+
+async function reverseGeocode(lat, lon) {
+  if (!GOOGLE_KEY) return null;
+  try {
+    const { data } = await axios.get(
+      'https://maps.googleapis.com/maps/api/geocode/json?latlng=' + lat + ',' + lon + '&result_type=neighborhood|sublocality|locality&key=' + GOOGLE_KEY
+    );
+    const result = data.results[0];
+    if (!result) return null;
+    const comps = result.address_components;
+    const neighborhood = comps.find(c => c.types.includes('neighborhood') || c.types.includes('sublocality'))?.long_name;
+    const city = comps.find(c => c.types.includes('locality'))?.long_name;
+    const state = comps.find(c => c.types.includes('administrative_area_level_1'))?.short_name;
+    if (neighborhood && city) return neighborhood + ', ' + city;
+    if (city && state) return city + ', ' + state;
+    return null;
+  } catch (err) {
+    return null;
+  }
+}
 
 const VALID_TYPES = ['crowd', 'block', 'police', 'other'];
 
@@ -11,7 +33,10 @@ const VALID_TYPES = ['crowd', 'block', 'police', 'other'];
 router.post('/',
   requireBody(['lat', 'lon', 'type', 'crowdSize']),
   async (req, res) => {
-    const { lat, lon, type, crowdSize, note, locationLabel } = req.body;
+    let { lat, lon, type, crowdSize, note, locationLabel } = req.body;
+    if (!locationLabel) {
+      locationLabel = await reverseGeocode(parseFloat(lat), parseFloat(lon));
+    }
     if (!['crowd','block','police','other'].includes(type)) {
       return res.status(400).json({ error: 'invalid type' });
     }

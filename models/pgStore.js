@@ -19,7 +19,7 @@ async function init() {
       lat DOUBLE PRECISION, lon DOUBLE PRECISION,
       location_label TEXT, severity TEXT, score INT,
       message TEXT, report_score INT, spike_score INT,
-      report_count INT, spike_count INT,
+      report_count INT, spike_count INT, recent_note TEXT,
       resolved BOOLEAN DEFAULT FALSE, created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
@@ -66,16 +66,17 @@ async function getAlertsNear(lat, lon, radiusKm, windowMin) {
     createdAt: new Date(r.created_at).getTime(),
     ageMinutes: Math.round(r.age_minutes),
     distanceKm: 0,
-    components: { reportScore: r.report_score, spikeScore: r.spike_score, reportCount: r.report_count, spikeCount: r.spike_count }
+    components: { reportScore: r.report_score, spikeScore: r.spike_score, reportCount: r.report_count, spikeCount: r.spike_count },
+    recentNote: r.recent_note || null
   }));
 }
 
-async function createAlert({ lat, lon, locationLabel, severity, score, message, components }) {
+async function createAlert({ lat, lon, locationLabel, severity, score, message, components, recentNote }) {
   const { rows } = await pool.query(
-    `INSERT INTO alerts (lat, lon, location_label, severity, score, message, report_score, spike_score, report_count, spike_count)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+    `INSERT INTO alerts (lat, lon, location_label, severity, score, message, report_score, spike_score, report_count, spike_count, recent_note)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
     [lat, lon, locationLabel, severity, score, message,
-     components.reportScore, components.spikeScore, components.reportCount, components.spikeCount]
+     components.reportScore, components.spikeScore, components.reportCount, components.spikeCount, recentNote || null]
   );
   return rows[0];
 }

@@ -13,6 +13,8 @@ const SEVERITY_MESSAGES = {
 
 async function evaluateAndAlert(lat, lon, locationLabel = null) {
   const result = await computeScore(lat, lon);
+  const recentReports = await pgStore.getReportsNear(lat, lon, 0.5, 30);
+  const recentNote = recentReports.find(r => r.note)?.note || null;
   if (result.severity === 'NONE') return null;
 
   const cooldown = await pgStore.recentAlertNear(lat, lon, 0.5, COOLDOWN_MIN);
@@ -23,6 +25,7 @@ async function evaluateAndAlert(lat, lon, locationLabel = null) {
     severity: result.severity, score: result.score,
     message: SEVERITY_MESSAGES[result.severity],
     components: result.components,
+    recentNote,
   });
 
   const apiAlert = {

@@ -21,4 +21,33 @@ router.patch('/:id/resolve', async (req, res) => {
   res.json({ success: true, alert });
 });
 
+
+// POST /api/alerts/:id/confirm
+router.post('/:id/confirm', async (req, res) => {
+  try {
+    const { rows } = await pgStore.pool.query(
+      'UPDATE alerts SET confirm_count = confirm_count + 1 WHERE id = $1 RETURNING *',
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Alert not found' });
+    res.json({ success: true, confirm_count: rows[0].confirm_count, deny_count: rows[0].deny_count });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/alerts/:id/deny
+router.post('/:id/deny', async (req, res) => {
+  try {
+    const { rows } = await pgStore.pool.query(
+      'UPDATE alerts SET deny_count = deny_count + 1 WHERE id = $1 RETURNING *',
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Alert not found' });
+    res.json({ success: true, confirm_count: rows[0].confirm_count, deny_count: rows[0].deny_count });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

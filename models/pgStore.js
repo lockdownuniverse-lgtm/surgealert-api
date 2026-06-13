@@ -67,7 +67,9 @@ async function getAlertsNear(lat, lon, radiusKm, windowMin) {
     ageMinutes: Math.round(r.age_minutes),
     distanceKm: 0,
     components: { reportScore: r.report_score, spikeScore: r.spike_score, reportCount: r.report_count, spikeCount: r.spike_count },
-    recentNote: r.recent_note || null
+    recentNote: r.recent_note || null,
+    confirmCount: r.confirm_count || 0,
+    denyCount: r.deny_count || 0
   }));
 }
 

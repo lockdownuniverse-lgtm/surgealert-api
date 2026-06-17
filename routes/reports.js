@@ -57,25 +57,15 @@ router.post('/',
 
 // GET /api/reports?lat=&lon=&radius=
 // Returns recent reports near location
-router.get('/', requireLatLon, (req, res) => {
-  const { haversine } = require('../services/scoreEngine');
-  const { lat, lon } = req.coords;
-  const radius = parseFloat(req.query.radius) || 1.0;
-  const WINDOW_MS = 60 * 60 * 1000;
-  const now = Date.now();
-
-  const nearby = store.reports
-    .filter(r => {
-      if (now - r.createdAt > WINDOW_MS) return false;
-      return haversine(lat, lon, r.lat, r.lon) <= radius;
-    })
-    .map(r => ({
-      ...r,
-      distanceKm: +haversine(lat, lon, r.lat, r.lon).toFixed(2),
-      ageMinutes: Math.round((now - r.createdAt) / 60000),
-    }));
-
-  res.json({ count: nearby.length, reports: nearby });
+router.get('/', requireLatLon, async (req, res) => {
+  try {
+    const { lat, lon } = req.coords;
+    const radius = parseFloat(req.query.radius) || 1.0;
+    const reports = await pgStore.getReportsNear(lat, lon, radius, 60);
+    res.json({ count: reports.length, reports });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/reports/:id/confirm  — community confirmation (Waze-style thumbs up)

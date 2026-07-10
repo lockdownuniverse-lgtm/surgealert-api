@@ -39,7 +39,7 @@ router.post('/',
     if (!locationLabel) {
       locationLabel = await reverseGeocode(parseFloat(lat), parseFloat(lon));
     }
-    if (!['crowd','block','police','other'].includes(type)) {
+    if (!['crowd','block','police','other','protest','riot','chanting','concert','sports','fireworks','festival','medical','fire','power','incident','transit','parking','rideshare','weather','flood'].includes(type)) {
       return res.status(400).json({ error: 'invalid type' });
     }
     const size = parseInt(crowdSize);
